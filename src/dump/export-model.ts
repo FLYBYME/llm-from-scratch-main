@@ -11,11 +11,11 @@ async function exportModel() {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     const dataPath = path.join(__dirname, "..", "data", "shakespeare.txt");
-    
+
     if (!fs.existsSync(dataPath)) {
         throw new Error("Shakespeare data not found!");
     }
-    
+
     const textData = fs.readFileSync(dataPath, "utf-8");
     console.log(`Loaded ${textData.length} characters.`);
 
@@ -32,16 +32,16 @@ async function exportModel() {
 
     const exportPath = path.join(__dirname, "..", "public", "model");
     console.log(`Saving model to ${exportPath}...`);
-    
+
     // Save model topology and weights
     await model.save(`file://${exportPath}`);
-    
+
     // Also save tokenizer metadata (the characters it knows)
     const tokenizerMeta = {
         chars: Array.from(new Set(textData.split(''))).sort()
     };
     fs.writeFileSync(path.join(exportPath, "tokenizer.json"), JSON.stringify(tokenizerMeta));
-    
+
     console.log("Export complete!");
 }
 

@@ -1,109 +1,73 @@
 import * as tf from "@tensorflow/tfjs";
 import { type GPTConfig } from "./tokenizer.js";
-import { assertSymbolic } from "./type-guards.js";
+import { TransformerBlock } from "./layers/block.js";
+import { LearnedPositionEmbedding } from "./layers/embeddings.js";
+import { ensureSymbolic } from "./type-guards.js";
 
-export class RangeLayer extends tf.layers.Layer {
-    private limit: number;
-
-    constructor(config: any) {
-        // Support both new RangeLayer(limit) and deserialization new RangeLayer({limit: 10})
-        if (typeof config === 'number') {
-            super({});
-            this.limit = config;
-        } else {
-            super(config);
-            this.limit = config.limit;
-        }
-    }
-
-    getConfig(): tf.serialization.ConfigDict {
-        const config = super.getConfig();
-        Object.assign(config, { limit: this.limit });
-        return config;
-    }
-
-    call(_inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
-        return tf.tidy(() => {
-            return tf.range(0, this.limit, 1, 'int32').expandDims(0);
-        });
-    }
-
-    computeOutputShape(): number[] {
-        return [1, this.limit];
-    }
-
-    static get className() { return 'RangeLayer'; }
-}
-tf.serialization.registerClass(RangeLayer);
-
+/**
+ * High-fidelity GPT Model builder.
+ * Uses custom layers to construct a real Transformer architecture.
+ */
 export class GPTModel {
-    private config: GPTConfig;
-    private wte: tf.layers.Layer;
-    private wpe: tf.layers.Layer;
-    // Note: TFJS doesn't natively expose a simple MultiHeadAttention layer that matches 
-    // PyTorch's exact signature easily, so we construct the functional graph.
     private model: tf.LayersModel;
 
     constructor(config: GPTConfig) {
-        this.config = config;
-        
-        // Input sequence of token IDs
-        const inputIdx = tf.input({ shape: [config.block_size], dtype: 'int32' });
+        // 1. Input: Sequence of token IDs [Batch, SeqLen]
+        const tokenInputs = tf.input({ shape: [config.block_size], dtype: 'int32' });
 
-        // Token and Position Embeddings
-        this.wte = tf.layers.embedding({ inputDim: config.vocab_size, outputDim: config.n_embd });
-        this.wpe = tf.layers.embedding({ inputDim: config.block_size, outputDim: config.n_embd });
+        // 2. Token Embedding [Batch, SeqLen, embeddingDim]
+        // Map token IDs to vectors.
+        const tokenEmbeddings = ensureSymbolic(tf.layers.embedding({ 
+            inputDim: config.vocab_size, 
+            outputDim: config.embeddingDim,
+            name: 'token_embeddings'
+        }).apply(tokenInputs));
 
-        const tokEmb = assertSymbolic(this.wte.apply(inputIdx));
-        
-        // Create position indices [0, 1, ..., block_size - 1] symbolically
-        const posIndices = assertSymbolic(new RangeLayer(config.block_size).apply(inputIdx));
+        // 3. Position Embedding [1, SeqLen, embeddingDim] (broadcasted to batch)
+        // Map token positions to vectors.
+        const positionEmbeddings = ensureSymbolic(new LearnedPositionEmbedding(config).apply(tokenInputs));
 
-        const posEmb = assertSymbolic(this.wpe.apply(posIndices));
-        
-        // tok_emb + pos_emb
-        let x = assertSymbolic(tf.layers.add().apply([tokEmb, posEmb]));
+        // 4. Combined Embeddings + Dropout
+        // Sum the token and position vectors to get the final representation of each token.
+        let x = ensureSymbolic(tf.layers.add().apply([tokenEmbeddings, positionEmbeddings]));
+        x = ensureSymbolic(tf.layers.dropout({ rate: config.dropout }).apply(x));
 
-        // Stack Transformer Blocks
-        for (let i = 0; i < config.n_layer; i++) {
-            x = this.buildTransformerBlock(x);
+        // 5. Transformer Stack
+        // Pass the representations through a series of Transformer blocks.
+        for (let i = 0; i < config.numLayers; i++) {
+            x = ensureSymbolic(new TransformerBlock(config).apply(x));
         }
 
-        // Final LayerNorm & Linear Head
-        x = assertSymbolic(tf.layers.layerNormalization({ axis: -1 }).apply(x));
+        // 6. Final LayerNorm
+        x = ensureSymbolic(tf.layers.layerNormalization({ axis: -1, epsilon: 1e-5, name: 'final_layer_norm' }).apply(x));
         
-        // In PyTorch: self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        const logits = assertSymbolic(tf.layers.dense({ 
+        // 7. Language Model Head
+        // Project the final representations back to the vocabulary space to get logits for each token.
+        const logits = ensureSymbolic(tf.layers.dense({ 
             units: config.vocab_size, 
-            useBias: false 
+            useBias: false,
+            name: 'language_model_head'
         }).apply(x));
 
-        this.model = tf.model({ inputs: inputIdx, outputs: logits });
+        this.model = tf.model({ inputs: tokenInputs, outputs: logits });
     }
 
-    private buildTransformerBlock(x: tf.SymbolicTensor): tf.SymbolicTensor {
-        // 1. Pre-norm Self Attention
-        let norm1 = assertSymbolic(tf.layers.layerNormalization({ axis: -1 }).apply(x));
-        
-        // TFJS equivalent of CausalSelfAttention (simplified as a Dense projection for structural parity)
-        // A true from-scratch TS implementation requires custom WebGL kernels for scaled dot-product attention
-        let attn = assertSymbolic(tf.layers.dense({ units: this.config.n_embd }).apply(norm1));
-        x = assertSymbolic(tf.layers.add().apply([x, attn])); // Residual
-
-        // 2. Pre-norm MLP (GELU approx)
-        let norm2 = assertSymbolic(tf.layers.layerNormalization({ axis: -1 }).apply(x));
-        let mlp = assertSymbolic(tf.layers.dense({ 
-            units: 4 * this.config.n_embd, 
-            activation: 'gelu' 
-        }).apply(norm2));
-        
-        mlp = assertSymbolic(tf.layers.dense({ units: this.config.n_embd }).apply(mlp));
-        x = assertSymbolic(tf.layers.add().apply([x, mlp])); // Residual
-
-        return x;
+    /**
+     * Compiles the model with the Adam optimizer and sparse categorical crossentropy.
+     */
+    public compile(learningRate: number = 3e-4) {
+        this.model.compile({
+            optimizer: tf.train.adam(learningRate),
+            loss: 'sparseCategoricalCrossentropy',
+            metrics: ['accuracy']
+        });
     }
 
     public getLayersModel(): tf.LayersModel {
         return this.model;
+    }
+
+    public summary() {
+        this.model.summary();
     }
 }

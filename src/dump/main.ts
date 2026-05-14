@@ -27,16 +27,16 @@ async function main() {
     // 2. Define configuration
     // PERFORMANCE CONFIG: Optimized for a dedicated 16GB eGPU.
     const config: GPTConfig = {
-        vocab_size: 0,    
-        block_size: 128,  
-        n_layer: 8,       
-        n_head: 8,        
-        n_embd: 512,      
+        vocab_size: 0,
+        block_size: 128,
+        n_layer: 8,
+        n_head: 8,
+        n_embd: 512,
     };
 
     // 3. Train the model
-    const batchSize = 32;  
-    const maxSteps = 5000; 
+    const batchSize = 32;
+    const maxSteps = 5000;
 
     console.log("Starting training...");
     const { model, tokenizer } = await train(textData, { ...config, vocab_size: new Set(textData.split('')).size }, batchSize, maxSteps);

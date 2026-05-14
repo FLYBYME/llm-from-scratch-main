@@ -7,9 +7,6 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
     const tokenizer = new CharTokenizer(textData);
     const tokensArray = tokenizer.encode(textData);
     
-    // Move the entire dataset to the GPU once to eliminate Thunderbolt transfer bottlenecks
-    const allTokens = tf.tensor1d(tokensArray, 'int32');
-    
     const gpt = new GPTModel(config);
     const model = gpt.getLayersModel();
 

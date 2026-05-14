@@ -1,41 +1,38 @@
 import * as tf from "@tensorflow/tfjs";
 
 /**
- * Asserts that a value is a single SymbolicTensor.
+ * Narrow a value to a single Tensor.
  */
-export function assertSymbolic(val: tf.Tensor | tf.Tensor[] | tf.SymbolicTensor | tf.SymbolicTensor[]): tf.SymbolicTensor {
+export function ensureTensor(val: tf.Tensor | tf.Tensor[] | tf.SymbolicTensor | tf.SymbolicTensor[]): tf.Tensor {
+    if (val instanceof tf.Tensor) {
+        return val;
+    }
+    if (Array.isArray(val) && val[0] instanceof tf.Tensor) {
+        return val[0];
+    }
+    throw new Error(`Expected Tensor, but received ${Array.isArray(val) ? 'Array' : typeof val}`);
+}
+
+/**
+ * Narrow a value to a single SymbolicTensor.
+ */
+export function ensureSymbolic(val: tf.Tensor | tf.Tensor[] | tf.SymbolicTensor | tf.SymbolicTensor[]): tf.SymbolicTensor {
     if (val instanceof tf.SymbolicTensor) {
         return val;
+    }
+    if (Array.isArray(val) && val[0] instanceof tf.SymbolicTensor) {
+        return val[0];
     }
     throw new Error(`Expected SymbolicTensor, but received ${Array.isArray(val) ? 'Array' : typeof val}`);
 }
 
 /**
- * Asserts that a value is a Tensor1D.
+ * Asserts that a value is a Tensor of a specific rank.
  */
-export function assertTensor1D(val: tf.Tensor | tf.Tensor[]): tf.Tensor1D {
-    if (!Array.isArray(val) && val.rank === 1) {
-        return val as tf.Tensor1D; // This 'as' is safe because of the rank check
+export function ensureRank(val: tf.Tensor | tf.Tensor[], rank: number): tf.Tensor {
+    const t = ensureTensor(val);
+    if (t.rank === rank) {
+        return t;
     }
-    throw new Error(`Expected Tensor1D, but received ${Array.isArray(val) ? 'Array' : 'Tensor' + val.rank}`);
-}
-
-/**
- * Asserts that a value is a Tensor2D.
- */
-export function assertTensor2D(val: tf.Tensor | tf.Tensor[]): tf.Tensor2D {
-    if (!Array.isArray(val) && val.rank === 2) {
-        return val as tf.Tensor2D;
-    }
-    throw new Error(`Expected Tensor2D, but received ${Array.isArray(val) ? 'Array' : 'Tensor' + val.rank}`);
-}
-
-/**
- * Asserts that a value is a Tensor3D.
- */
-export function assertTensor3D(val: tf.Tensor | tf.Tensor[]): tf.Tensor3D {
-    if (!Array.isArray(val) && val.rank === 3) {
-        return val as tf.Tensor3D;
-    }
-    throw new Error(`Expected Tensor3D, but received ${Array.isArray(val) ? 'Array' : 'Tensor' + val.rank}`);
+    throw new Error(`Expected Tensor rank ${rank}, but received Tensor rank ${t.rank}`);
 }

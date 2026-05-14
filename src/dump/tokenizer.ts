@@ -1,23 +1,16 @@
 import { z } from "zod";
 
-/**
- * Zod-driven schema for GPT configuration.
- * This ensures strict type safety at the boundaries.
- */
+// Zod-driven schema inference for strict boundary validation
 export const GPTConfigSchema = z.object({
-    vocab_size: z.number().int().nonnegative().describe("Total vocabulary size"),
-    block_size: z.number().int().positive().describe("Maximum sequence length (context window)"),
-    numLayers: z.number().int().positive().describe("Number of transformer layers"),
-    numHeads: z.number().int().positive().describe("Number of attention heads"),
-    embeddingDim: z.number().int().positive().describe("Embedding dimension size"),
-    dropout: z.number().min(0).max(1).describe("Dropout probability")
+    vocab_size: z.number().int().positive(),
+    block_size: z.number().int().positive(),
+    n_layer: z.number().int().positive(),
+    n_head: z.number().int().positive(),
+    n_embd: z.number().int().positive(),
 });
 
 export type GPTConfig = z.infer<typeof GPTConfigSchema>;
 
-/**
- * Character-level tokenizer for high-fidelity text processing.
- */
 export class CharTokenizer {
     private stoi: Map<string, number> = new Map();
     private itos: Map<number, string> = new Map();
@@ -39,11 +32,7 @@ export class CharTokenizer {
     public encode(s: string): number[] {
         return s.split('').map((c) => {
             const id = this.stoi.get(c);
-            if (id === undefined) {
-                // Return 0 or a dedicated unknown token if we had one
-                return 0; 
-            }
-            return id;
+            return id ?? 0; // Fallback to 0 if unknown
         });
     }
 
@@ -56,9 +45,5 @@ export class CharTokenizer {
 
     public getChar(id: number): string {
         return this.itos.get(id) ?? '';
-    }
-
-    public static fromMetadata(chars: string[]): CharTokenizer {
-        return new CharTokenizer(chars);
     }
 }
