@@ -1,7 +1,7 @@
 import * as tf from "@tensorflow/tfjs";
 import { type GPTConfig, CharTokenizer } from "./tokenizer.js";
 import { GPTModel } from "./model.js";
-import { assertTensor3D } from "./type-guards.js";
+
 
 export async function train(textData: string, config: GPTConfig, batchSize: number = 32, maxSteps: number = 5000) {
     const tokenizer = new CharTokenizer(textData);
@@ -20,7 +20,24 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
         loss: tf.losses.softmaxCrossEntropy,
     });
 
-    console.log(`Model initialized: ${config.n_layer}L/${config.n_head}H/${config.n_embd}D`);
+    // --- Model Metrics ---
+    const totalParams = model.countParams();
+    const weightBytes = totalParams * 4; // Assuming float32
+    const mem = tf.memory();
+    
+    console.log(`\n--- Model Configuration ---`);
+    console.log(`Architecture: ${config.n_layer}L / ${config.n_head}H / ${config.n_embd}D`);
+    console.log(`Context Window: ${config.block_size} tokens`);
+    console.log(`Vocabulary Size: ${config.vocab_size}`);
+    console.log(`Total Parameters: ${(totalParams / 1e6).toFixed(2)}M`);
+    
+    console.log(`\n--- VRAM Metrics ---`);
+    console.log(`Weight Memory: ${(weightBytes / (1024 * 1024)).toFixed(2)} MB`);
+    console.log(`Active Tensors: ${mem.numTensors}`);
+    console.log(`Data Buffers: ${mem.numDataBuffers}`);
+    console.log(`Current Allocation: ${(mem.numBytes / (1024 * 1024)).toFixed(2)} MB`);
+    if (mem.unreliable) console.log(`Note: Memory reporting may be unreliable on this backend.`);
+    console.log(`---------------------------\n`);
 
     console.log("Entering training loop...");
     let lastTime = performance.now();
@@ -59,10 +76,10 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
             if (typeof result === 'number') {
                 loss = result;
             } else if (Array.isArray(result)) {
-                const first = result[0];
-                loss = typeof first === 'number' ? first : first.dataSync()[0];
+                const first = result[0] as number | tf.Tensor;
+                loss = typeof first === 'number' ? first : ((first as tf.Tensor).dataSync()[0] ?? 0);
             } else {
-                loss = result.dataSync()[0];
+                loss = (result as tf.Tensor).dataSync()[0] ?? 0;
             }
 
             if (step % 10 === 0 && step > 0) {
@@ -75,7 +92,8 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
             }
 
             if (step % 50 === 0) {
-                console.log(`\n[Step ${step}] Active Tensors: ${tf.memory().numTensors}`);
+                const currentMem = tf.memory();
+                console.log(`\n[Step ${step}] Tensors: ${currentMem.numTensors} | Buffers: ${currentMem.numDataBuffers} | VRAM: ${(currentMem.numBytes / (1024 * 1024)).toFixed(2)} MB`);
             }
 
         } finally {
