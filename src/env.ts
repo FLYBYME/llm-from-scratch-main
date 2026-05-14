@@ -32,6 +32,6 @@ export function setupEnv() {
         // HARD LIMIT: Force TensorFlow to only ever touch 80% of your VRAM.
         // Since you have two GPUs, you can move your browser/UI to the AMD one
         // to free up even more of the 3080!
-        env.TF_PER_PROCESS_GPU_MEMORY_FRACTION = '0.8';
+        env.TF_PER_PROCESS_GPU_MEMORY_FRACTION = '0.9';
     }
 }

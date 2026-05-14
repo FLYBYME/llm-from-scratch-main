@@ -35,7 +35,7 @@ async function main() {
     };
 
     // 3. Train the model
-    const batchSize = 128;  
+    const batchSize = 64;  
     const maxSteps = 5000; 
 
     console.log("Starting training...");
