@@ -51,21 +51,15 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
         const stepStartTime = performance.now();
         
         const batch = getBatch();
-        const history = await model.fit(batch.x, batch.y, {
-            batchSize: batchSize,
-            epochs: 1,
-            verbose: 0
-        });
+        const lossTensor = await model.trainOnBatch(batch.x, batch.y) as tf.Tensor;
+        const loss = (await lossTensor.data())[0];
 
-        tf.dispose([batch.x, batch.y]);
+        tf.dispose([batch.x, batch.y, lossTensor]);
 
         if (step % 10 === 0 && step > 0) {
             const currentTime = performance.now();
             const timePerStep = (currentTime - lastTime) / 10;
             const stepsPerSec = (1000 / timePerStep).toFixed(2);
-            
-            const losses = history.history['loss'];
-            const loss = losses?.[0];
             
             if (typeof loss === 'number') {
                 process.stdout.write(`\rStep ${step} | loss: ${loss.toFixed(4)} | speed: ${stepsPerSec} steps/s (${timePerStep.toFixed(0)}ms/step)`);
