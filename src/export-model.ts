@@ -1,6 +1,5 @@
 import { setupEnv } from "./env.js";
 setupEnv();
-import "@tensorflow/tfjs-node";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from 'url';
@@ -8,6 +7,7 @@ import { train } from "./train.js";
 import { type GPTConfig } from "./tokenizer.js";
 
 async function exportModel() {
+    await import("@tensorflow/tfjs-node-gpu");
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     const dataPath = path.join(__dirname, "..", "data", "shakespeare.txt");

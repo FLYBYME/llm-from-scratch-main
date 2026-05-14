@@ -5,12 +5,15 @@ import { assertTensor3D } from "./type-guards.js";
 
 export async function train(textData: string, config: GPTConfig, batchSize: number = 64, maxSteps: number = 5000) {
     const tokenizer = new CharTokenizer(textData);
-    const tokens = tokenizer.encode(textData);
+    const tokensArray = tokenizer.encode(textData);
+    
+    // Move the entire dataset to the GPU once to eliminate Thunderbolt transfer bottlenecks
+    const allTokens = tf.tensor1d(tokensArray, 'int32');
     
     const gpt = new GPTModel(config);
     const model = gpt.getLayersModel();
 
-    // Adam optimizer (TFJS does not have a native AdamW, but Adam suffices for this scale)
+    // Adam optimizer
     const optimizer = tf.train.adam(1e-3);
     model.compile({
         optimizer: optimizer,
@@ -19,46 +22,58 @@ export async function train(textData: string, config: GPTConfig, batchSize: numb
 
     console.log(`Model initialized: ${config.n_layer}L/${config.n_head}H/${config.n_embd}D`);
 
-    // Batch generator
+    // High-performance batch generator (Slices directly on the GPU)
     const getBatch = (): { x: tf.Tensor2D, y: tf.Tensor3D } => {
         return tf.tidy(() => {
-            const xBatch: number[][] = [];
-            const yBatch: number[][] = []; // Targets are shifted by one
+            const xIndices: tf.Tensor2D[] = [];
+            const yIndices: tf.Tensor2D[] = [];
 
             for (let i = 0; i < batchSize; i++) {
-                const ix = Math.floor(Math.random() * (tokens.length - config.block_size - 1));
-                xBatch.push(tokens.slice(ix, ix + config.block_size));
+                const ix = Math.floor(Math.random() * (tokensArray.length - config.block_size - 1));
                 
-                // For cross entropy, targets are often one-hot encoded in TFJS
-                yBatch.push(tokens.slice(ix + 1, ix + config.block_size + 1)); 
+                // These slices now happen directly in VRAM
+                xIndices.push(allTokens.slice([ix], [config.block_size]).expandDims(0) as tf.Tensor2D);
+                yIndices.push(allTokens.slice([ix + 1], [config.block_size]).expandDims(0) as tf.Tensor2D);
             }
 
-            const xTensor = tf.tensor2d(xBatch, [batchSize, config.block_size], 'int32');
-            const yTensor = tf.oneHot(tf.tensor2d(yBatch, [batchSize, config.block_size], 'int32'), config.vocab_size);
+            const xTensor = tf.concat(xIndices, 0);
+            const yIndicesTensor = tf.concat(yIndices, 0);
+            const yTensor = tf.oneHot(yIndicesTensor, config.vocab_size);
             
-            return { x: xTensor, y: assertTensor3D(yTensor) };
+            return { x: xTensor as tf.Tensor2D, y: assertTensor3D(yTensor) };
         });
     };
 
+    console.log("Entering training loop...");
+    let lastTime = performance.now();
+    
     for (let step = 0; step < maxSteps; step++) {
-        const batch = getBatch();
+        const stepStartTime = performance.now();
         
-        // model.fit acts as the forward pass, backward pass, and optimizer.step()
+        const batch = getBatch();
         const history = await model.fit(batch.x, batch.y, {
             batchSize: batchSize,
             epochs: 1,
             verbose: 0
         });
 
-        tf.dispose([batch.x, batch.y]); // Crucial to avoid WebGL memory leaks
+        tf.dispose([batch.x, batch.y]);
 
-        if (step % 100 === 0) {
+        if (step % 10 === 0 && step > 0) {
+            const currentTime = performance.now();
+            const timePerStep = (currentTime - lastTime) / 10;
+            const stepsPerSec = (1000 / timePerStep).toFixed(2);
+            
             const losses = history.history['loss'];
             const loss = losses?.[0];
+            
             if (typeof loss === 'number') {
-                console.log(`Step ${step} | loss: ${loss.toFixed(4)}`);
+                process.stdout.write(`\rStep ${step} | loss: ${loss.toFixed(4)} | speed: ${stepsPerSec} steps/s (${timePerStep.toFixed(0)}ms/step)`);
             }
+            lastTime = currentTime;
         }
+
+        if (step === maxSteps - 1) console.log("\nTraining complete.");
     }
     
     return { model, tokenizer };

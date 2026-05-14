@@ -5,14 +5,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "train": "tsx src/main.ts",
+    "train": "set TF_FORCE_GPU_ALLOW_GROWTH=true&& tsx src/main.ts",
     "export-model": "tsx src/export-model.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",
-    "@tensorflow/tfjs-node": "^4.22.0",
+    "@tensorflow/tfjs-node-gpu": "^4.22.0",
     "@tensorflow/tfjs-vis": "^1.5.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
