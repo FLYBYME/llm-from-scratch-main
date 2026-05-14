@@ -28,14 +28,14 @@ async function main() {
     // PERFORMANCE CONFIG: Optimized for a dedicated 16GB eGPU.
     const config: GPTConfig = {
         vocab_size: 0,    
-        block_size: 256,  
+        block_size: 128,  
         n_layer: 8,       
         n_head: 8,        
-        n_embd: 512,      // Balanced at 512 to fit in VRAM with large batches
+        n_embd: 512,      
     };
 
     // 3. Train the model
-    const batchSize = 64;  
+    const batchSize = 32;  
     const maxSteps = 5000; 
 
     console.log("Starting training...");

@@ -25,7 +25,7 @@ export async function generate(
             ? [...new Array(config.block_size - context.length).fill(0), ...context]
             : context;
 
-        const nextTokenId = tf.tidy(() => {
+        const nextTokenIdTensor = tf.tidy(() => {
             const inputTensor = tf.tensor2d([paddedContext], [1, config.block_size], 'int32');
             
             // Get logits: shape (1, block_size, vocab_size)
@@ -41,9 +41,13 @@ export async function generate(
             // Softmax to get probabilities
             const probs = tf.softmax(scaledLogits);
             
-            // Sample from distribution (Multinomial equivalent)
-            return tf.multinomial(assertTensor1D(probs), 1, undefined, true).dataSync()[0];
+            // Return the sampler tensor to be read asynchronously
+            return tf.multinomial(assertTensor1D(probs), 1, undefined, true);
         });
+
+        const nextTokenIdArray = await nextTokenIdTensor.data();
+        nextTokenIdTensor.dispose();
+        const nextTokenId = nextTokenIdArray[0];
 
         if (nextTokenId !== undefined) {
             currentSequence.push(nextTokenId);
