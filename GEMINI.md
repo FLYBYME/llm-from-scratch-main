@@ -29,3 +29,6 @@ If successful, you should see logs indicating the GPU device is initialized.
 ## Troubleshooting
 
 If you see `ERR_DLOPEN_FAILED`, it likely means `cudart64_110.dll` or `cudnn64_8.dll` is not in your `Path`.
+
+
+set FORCE_CPU=false && npm run demo
