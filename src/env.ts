@@ -6,6 +6,20 @@ import { env, platform } from 'process';
  * Polyfill for Node compatibility and GPU environment setup.
  */
 export async function setupEnv() {
+    // Windows-specific DLL path fixes
+    if (platform === 'win32') {
+        const tfLibPath = path.resolve('node_modules/@tensorflow/tfjs-node-gpu/deps/lib');
+        
+        // In modern Node.js, we should use addDllDirectory for DLL search paths
+        if ('addDllDirectory' in process) {
+            (process as any).addDllDirectory(tfLibPath);
+        }
+
+        if (!env.PATH?.includes(tfLibPath)) {
+            env.PATH = `${tfLibPath};${env.PATH}`;
+        }
+    }
+
     // Import GPU backend
     try {
         await import('@tensorflow/tfjs-node-gpu');
@@ -13,6 +27,7 @@ export async function setupEnv() {
     } catch (e) {
         console.warn('Failed to load tfjs-node-gpu, falling back to CPU. Error:', e);
     }
+    
     // Polyfill for older/newer Node versions if needed
     if (!('isNullOrUndefined' in util)) {
         Object.defineProperty(util, 'isNullOrUndefined', {
@@ -30,13 +45,5 @@ export async function setupEnv() {
     if (env.FORCE_CPU === 'true') {
         env.CUDA_VISIBLE_DEVICES = '-1';
         console.log('FORCE_CPU is set. Disabling GPU initialization.');
-    }
-
-    // Windows-specific DLL path fixes
-    if (platform === 'win32') {
-        const tfLibPath = path.resolve('node_modules/@tensorflow/tfjs-node-gpu/deps/lib');
-        if (!env.PATH?.includes(tfLibPath)) {
-            env.PATH = `${tfLibPath};${env.PATH}`;
-        }
     }
 }
