@@ -47,7 +47,7 @@ async function demo() {
              * WHY: Larger batch sizes can lead to more stable training 
              * and better GPU utilization, but they require more memory.
              */
-            batchSize: 8,
+            batchSize: 80,
 
             /**
              * @field numLayers

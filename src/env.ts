@@ -26,16 +26,17 @@ export async function setupEnv() {
     // Allow memory growth instead of pre-allocating a large fraction
     env.TF_FORCE_GPU_ALLOW_GROWTH = 'true';
 
+    // If FORCE_CPU is set, disable GPU by hiding devices
+    if (env.FORCE_CPU === 'true') {
+        env.CUDA_VISIBLE_DEVICES = '-1';
+        console.log('FORCE_CPU is set. Disabling GPU initialization.');
+    }
+
     // Windows-specific DLL path fixes
     if (platform === 'win32') {
         const tfLibPath = path.resolve('node_modules/@tensorflow/tfjs-node-gpu/deps/lib');
         if (!env.PATH?.includes(tfLibPath)) {
             env.PATH = `${tfLibPath};${env.PATH}`;
         }
-    }
-
-    // Default to the first GPU
-    if (!env.CUDA_VISIBLE_DEVICES) {
-        env.CUDA_VISIBLE_DEVICES = '0';
     }
 }

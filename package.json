@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "train": "set TF_FORCE_GPU_ALLOW_GROWTH=true&& tsx src/main.ts",
-    "demo": "tsx src/demo.ts",
+    "demo": "export FORCE_CPU=true && tsx src/demo.ts",
     "export-model": "tsx src/export-model.ts",
     "build": "tsc"
   },
